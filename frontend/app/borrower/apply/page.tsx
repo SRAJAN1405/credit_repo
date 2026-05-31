@@ -1,7 +1,13 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Check, User, CreditCard, Calendar, IndianRupee, Briefcase,
+  UploadCloud, FileText, ArrowRight, ArrowLeft, Loader2, Rocket,
+  AlertCircle, CheckCircle2, ChevronRight, Shield, Sparkles,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { calculateLoan, formatCurrency } from '@/lib/utils';
@@ -16,13 +22,200 @@ interface PersonalDetails {
   employmentMode: string;
 }
 
+// ─── Motion Variants ────────────────────────────────────────────────────────
+const pageVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+  exit: { opacity: 0, y: -16, transition: { duration: 0.25, ease: 'easeIn' } },
+};
+
+const containerVariants = {
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const childVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+};
+
+// ─── Improved UI Components ─────────────────────────────────────────────────
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="block text-xs font-bold tracking-[0.08em] text-slate-400 uppercase mb-2.5">
+      {children}
+    </label>
+  );
+}
+
+function InputWrapper({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="relative group">
+      <span className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500 group-focus-within:text-violet-400 transition-colors">
+        {icon}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+const inputClass =
+  'w-full bg-zinc-900 border border-zinc-700 hover:border-zinc-600 focus:border-violet-500 ' +
+  'rounded-2xl pl-11 pr-5 py-4 text-base text-zinc-100 outline-none transition-all duration-200 ' +
+  'placeholder:text-zinc-600 focus:ring-2 focus:ring-violet-500/20 ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed';
+
+function SectionCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-6 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// ─── Stepper ─────────────────────────────────────────────────────────────────
+const STEPS = [
+  { num: 1 as Step, label: 'Auth' },
+  { num: 2 as Step, label: 'Details' },
+  { num: 3 as Step, label: 'Documents' },
+  { num: 4 as Step, label: 'Configure' },
+];
+
+function Stepper({ current }: { current: Step }) {
+  return (
+    <nav aria-label="Application steps" className="flex items-center gap-0 mb-10">
+      {STEPS.map((s, i) => {
+        const done = current > s.num;
+        const active = current === s.num;
+        return (
+          <div key={s.num} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-2 flex-shrink-0">
+              <div
+                className={[
+                  'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300',
+                  done
+                    ? 'bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.35)]'
+                    : active
+                    ? 'bg-violet-600 text-white shadow-[0_0_18px_rgba(139,92,246,0.45)] ring-2 ring-violet-500/30 ring-offset-2 ring-offset-zinc-950'
+                    : 'bg-zinc-900 border border-zinc-800 text-zinc-600',
+                ].join(' ')}
+              >
+                {done ? <Check size={14} strokeWidth={3} /> : s.num}
+              </div>
+              <span
+                className={[
+                  'text-[10px] font-bold tracking-widest uppercase',
+                  done ? 'text-emerald-500' : active ? 'text-violet-400' : 'text-zinc-700',
+                ].join(' ')}
+              >
+                {s.label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className="flex-1 h-px mx-3 mt-[-18px] bg-zinc-800 overflow-hidden rounded-full">
+                <motion.div
+                  className="h-full bg-emerald-500"
+                  initial={{ width: '0%' }}
+                  animate={{ width: done ? '100%' : '0%' }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ─── Range Slider ─────────────────────────────────────────────────────────────
+function RangeSlider({
+  label, value, min, max, step, format, color, onChange,
+}: {
+  label: string; value: number; min: number; max: number; step: number;
+  format: (v: number) => string; color: 'violet' | 'indigo'; onChange: (v: number) => void;
+}) {
+  const pct = ((value - min) / (max - min)) * 100;
+  const track = color === 'violet' ? '#7c3aed' : '#4f46e5';
+
+  return (
+    <SectionCard>
+      <div className="flex justify-between items-baseline mb-5">
+        <FieldLabel>{label}</FieldLabel>
+        <span className="text-xl font-bold text-zinc-100 tabular-nums font-mono">{format(value)}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+        style={{
+          background: `linear-gradient(to right, ${track} ${pct}%, rgba(255,255,255,0.08) ${pct}%)`,
+          accentColor: track,
+        }}
+      />
+      <div className="flex justify-between text-xs font-mono text-zinc-600 mt-4">
+        <span>{format(min)}</span>
+        <span>{format(max)}</span>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ─── Buttons ────────────────────────────────────────────────────────────────
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 w-14 h-14 flex items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-600 transition-all duration-200"
+      aria-label="Go back"
+    >
+      <ArrowLeft size={20} />
+    </button>
+  );
+}
+
+function PrimaryButton({
+  onClick, disabled, loading, loadingLabel, children,
+}: {
+  onClick: () => void; disabled?: boolean; loading?: boolean;
+  loadingLabel?: string; children: React.ReactNode;
+}) {
+  return (
+    <motion.button
+      type="button"
+      whileHover={{ scale: disabled ? 1 : 1.02 }}
+      whileTap={{ scale: disabled ? 1 : 0.97 }}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-1 h-14 flex items-center justify-center gap-3 rounded-2xl text-base font-semibold bg-violet-600 hover:bg-violet-500 active:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/30 transition-all duration-200"
+    >
+      {loading ? (
+        <>
+          <Loader2 size={20} className="animate-spin" />
+          {loadingLabel}
+        </>
+      ) : (
+        <>{children}</>
+      )}
+    </motion.button>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 export default function ApplyPage() {
   const router = useRouter();
   const { user, isLoading, initAuth } = useAuthStore();
+
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
+  const [breErrors, setBreErrors] = useState<string[]>([]);
+  const [salarySlipFile, setSalarySlipFile] = useState<File | null>(null);
+  const [salarySlipPath, setSalarySlipPath] = useState('');
+  const [uploading, setUploading] = useState(false);
 
-  // Step 2 data
+  const [loanAmount, setLoanAmount] = useState(200000);
+  const [tenure, setTenure] = useState(180);
+
   const [personal, setPersonal] = useState<PersonalDetails>({
     fullName: '',
     pan: '',
@@ -30,22 +223,10 @@ export default function ApplyPage() {
     monthlySalary: '',
     employmentMode: 'salaried',
   });
-  const [breErrors, setBreErrors] = useState<string[]>([]);
-
-  // Step 3 data
-  const [salarySlipFile, setSalarySlipFile] = useState<File | null>(null);
-  const [salarySlipPath, setSalarySlipPath] = useState<string>('');
-  const [uploading, setUploading] = useState(false);
-
-  // Step 4 data
-  const [loanAmount, setLoanAmount] = useState(200000);
-  const [tenure, setTenure] = useState(180);
 
   const loanCalc = calculateLoan(loanAmount, tenure);
 
-  useEffect(() => {
-    initAuth();
-  }, [initAuth]);
+  useEffect(() => { initAuth(); }, [initAuth]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -54,13 +235,15 @@ export default function ApplyPage() {
     }
   }, [user, isLoading, router]);
 
+  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleBRECheck = async () => {
-    if (!personal.fullName || !personal.pan || !personal.dateOfBirth || !personal.monthlySalary || !personal.employmentMode) {
+    if (!personal.fullName || !personal.pan || !personal.dateOfBirth || !personal.monthlySalary) {
       toast.error('Please fill all fields');
       return;
     }
     setLoading(true);
     setBreErrors([]);
+
     try {
       await api.post('/loans/check-eligibility', {
         dateOfBirth: personal.dateOfBirth,
@@ -68,11 +251,10 @@ export default function ApplyPage() {
         pan: personal.pan,
         employmentMode: personal.employmentMode,
       });
-      toast.success('Eligibility check passed! ✅');
+      toast.success('Eligibility check passed!');
       setStep(3);
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { errors?: string[]; message?: string } } };
-      const errors = error.response?.data?.errors || [error.response?.data?.message || 'Check failed'];
+    } catch (err: any) {
+      const errors = err.response?.data?.errors || [err.response?.data?.message || 'Check failed'];
       setBreErrors(errors);
       toast.error('Eligibility check failed');
     } finally {
@@ -81,23 +263,20 @@ export default function ApplyPage() {
   };
 
   const handleFileUpload = async () => {
-    if (!salarySlipFile) {
-      toast.error('Please select a file');
-      return;
-    }
+    if (!salarySlipFile) return toast.error('Please select a file');
     setUploading(true);
+
     try {
-      const formData = new FormData();
-      formData.append('salarySlip', salarySlipFile);
-      const { data } = await api.post('/loans/upload-salary-slip', formData, {
+      const fd = new FormData();
+      fd.append('salarySlip', salarySlipFile);
+      const { data } = await api.post('/loans/upload-salary-slip', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSalarySlipPath(data.filename);
-      toast.success('Salary slip uploaded!');
+      toast.success('Salary slip uploaded successfully');
       setStep(4);
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || 'Upload failed');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -113,355 +292,318 @@ export default function ApplyPage() {
         amount: loanAmount,
         tenure,
       });
-      toast.success('Loan application submitted! 🎉');
+      toast.success('Loan application submitted successfully!');
       router.push('/borrower/loans');
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string; errors?: string[] } } };
-      const msg = error.response?.data?.message || 'Application failed';
-      toast.error(msg);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Submission failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const steps = [
-    { num: 1, label: 'Auth' },
-    { num: 2, label: 'Details' },
-    { num: 3, label: 'Documents' },
-    { num: 4, label: 'Configure' },
-  ];
-
   return (
-    <div className="min-h-screen bg-[#0d0d1a] px-4 py-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased selection:bg-violet-500/20">
+      {/* Background Effects */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-64 right-0 w-[700px] h-[700px] bg-violet-600/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 -left-40 w-[600px] h-[600px] bg-indigo-600/8 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="relative z-10 max-w-2xl mx-auto px-4 py-12">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <motion.header
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between mb-10"
+        >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-purple-500/25">
-              L
+            <div className="w-9 h-9 rounded-xl bg-violet-600 flex items-center justify-center shadow-lg">
+              <Sparkles size={18} className="text-white" />
             </div>
-            <span className="font-semibold text-white">LoanMS</span>
+            <span className="font-bold text-lg tracking-tight">LoanMS</span>
           </div>
           <button
             onClick={() => router.push('/borrower/loans')}
-            className="text-slate-400 hover:text-white text-sm transition-colors"
+            className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
           >
-            View My Loans →
+            My Loans <ChevronRight size={16} />
           </button>
-        </div>
+        </motion.header>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Apply for a Loan</h1>
-        <p className="text-slate-400 text-sm mb-8">Complete the steps below to submit your application</p>
+        <h1 className="text-3xl font-bold tracking-tight mb-2">Loan Application</h1>
+        <p className="text-zinc-500 mb-8">Complete all steps to submit your application</p>
 
-        {/* Stepper */}
-        <div className="flex items-center mb-10">
-          {steps.map((s, i) => (
-            <div key={s.num} className="flex items-center flex-1">
-              <div className="flex flex-col items-center">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-                  step > s.num
-                    ? 'bg-green-500 text-white'
-                    : step === s.num
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/40'
-                    : 'bg-[#1e2035] text-slate-500'
-                }`}>
-                  {step > s.num ? '✓' : s.num}
-                </div>
-                <span className={`text-xs mt-1.5 font-medium ${step === s.num ? 'text-purple-400' : step > s.num ? 'text-green-400' : 'text-slate-600'}`}>
-                  {s.label}
-                </span>
-              </div>
-              {i < steps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-2 mb-4 rounded transition-all ${step > s.num ? 'bg-green-500' : 'bg-[#1e2035]'}`} />
+        <Stepper current={step} />
+
+        {/* Main Card */}
+        <div className="rounded-3xl border border-zinc-800/80 bg-zinc-900/60 backdrop-blur-2xl shadow-2xl overflow-hidden">
+          <div className="p-8 sm:p-10">
+            <AnimatePresence mode="wait">
+              {/* STEP 1 */}
+              {step === 1 && (
+                <motion.div key="step1" variants={pageVariants} initial="hidden" animate="visible" exit="exit">
+                  <div className="space-y-6">
+                    <SectionCard className="flex items-center gap-5">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                        <Shield size={28} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-lg">Identity Verified</p>
+                        <p className="text-sm text-zinc-500">Signed in as {user?.name}</p>
+                      </div>
+                      <span className="text-emerald-500 text-sm font-bold">ACTIVE</span>
+                    </SectionCard>
+
+                    <PrimaryButton onClick={() => setStep(2)}>
+                      Continue to Personal Details <ArrowRight size={18} />
+                    </PrimaryButton>
+                  </div>
+                </motion.div>
               )}
-            </div>
-          ))}
-        </div>
 
-        {/* Step 1: Already authenticated */}
-        {step === 1 && (
-          <div className="bg-[#13131f] border border-[#1e2035] rounded-2xl p-8 animate-fade-in">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center text-2xl">✅</div>
-              <div>
-                <h2 className="text-xl font-bold text-white">You're logged in!</h2>
-                <p className="text-slate-400 text-sm">Authenticated as {user?.name}</p>
-              </div>
-            </div>
-            <div className="bg-[#0d0d1a] rounded-xl p-4 border border-[#2d3748] mb-6">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-slate-500">Name:</span> <span className="text-white ml-2">{user?.name}</span></div>
-                <div><span className="text-slate-500">Email:</span> <span className="text-white ml-2">{user?.email}</span></div>
-                <div><span className="text-slate-500">Role:</span> <span className="text-purple-400 ml-2 capitalize">{user?.role}</span></div>
-              </div>
-            </div>
-            <button
-              onClick={() => setStep(2)}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl py-3 text-sm transition-all shadow-lg shadow-purple-500/25"
-            >
-              Continue to Personal Details →
-            </button>
-          </div>
-        )}
+              {/* STEP 2 - Personal Details (Improved) */}
+              {step === 2 && (
+                <motion.div key="step2" variants={pageVariants} initial="hidden" animate="visible" exit="exit">
+                  <h2 className="text-2xl font-bold mb-1">Personal Details</h2>
+                  <p className="text-zinc-500 mb-8">Used for eligibility verification</p>
 
-        {/* Step 2: Personal Details + BRE */}
-        {step === 2 && (
-          <div className="bg-[#13131f] border border-[#1e2035] rounded-2xl p-8 animate-fade-in">
-            <h2 className="text-xl font-bold text-white mb-1">Personal Details</h2>
-            <p className="text-slate-400 text-sm mb-6">We'll verify your eligibility based on these details</p>
+                  <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">
+                    {/* Full Name */}
+                    <div>
+                      <FieldLabel>Full Name (as per PAN)</FieldLabel>
+                      <InputWrapper icon={<User size={18} />}>
+                        <input
+                          type="text"
+                          value={personal.fullName}
+                          className={inputClass}
+                          placeholder="Rahul Sharma"
+                          onChange={(e) => setPersonal({ ...personal, fullName: e.target.value })}
+                        />
+                      </InputWrapper>
+                    </div>
 
-            {breErrors.length > 0 && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
-                <p className="text-red-400 font-semibold text-sm mb-2">❌ Eligibility Check Failed</p>
-                <ul className="space-y-1">
-                  {breErrors.map((err, i) => (
-                    <li key={i} className="text-red-300 text-sm flex items-start gap-2">
-                      <span>•</span><span>{err}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                    {/* Two Column Layout */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
+                        <FieldLabel>PAN Card Number</FieldLabel>
+                        <InputWrapper icon={<CreditCard size={18} />}>
+                          <input
+                            type="text"
+                            value={personal.pan}
+                            maxLength={10}
+                            className={`${inputClass} font-mono tracking-widest text-lg`}
+                            placeholder="ABCDE1234F"
+                            onChange={(e) => setPersonal({ ...personal, pan: e.target.value.toUpperCase() })}
+                          />
+                        </InputWrapper>
+                      </div>
 
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    value={personal.fullName}
-                    onChange={(e) => setPersonal({ ...personal, fullName: e.target.value })}
-                    className="w-full bg-[#0d0d1a] border border-[#2d3748] text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-all placeholder:text-slate-600"
-                    placeholder="As per PAN card"
-                  />
-                </div>
+                      <div>
+                        <FieldLabel>Date of Birth</FieldLabel>
+                        <InputWrapper icon={<Calendar size={18} />}>
+                          <input
+                            type="date"
+                            value={personal.dateOfBirth}
+                            className={`${inputClass} py-4`}
+                            onChange={(e) => setPersonal({ ...personal, dateOfBirth: e.target.value })}
+                          />
+                        </InputWrapper>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">PAN Card</label>
-                  <input
-                    type="text"
-                    value={personal.pan}
-                    onChange={(e) => setPersonal({ ...personal, pan: e.target.value.toUpperCase() })}
-                    maxLength={10}
-                    className="w-full bg-[#0d0d1a] border border-[#2d3748] text-white rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-purple-500 transition-all placeholder:text-slate-600 uppercase"
-                    placeholder="ABCDE1234F"
-                  />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
+                        <FieldLabel>Monthly Salary (₹)</FieldLabel>
+                        <InputWrapper icon={<IndianRupee size={18} />}>
+                          <input
+                            type="number"
+                            value={personal.monthlySalary}
+                            className={inputClass}
+                            placeholder="50000"
+                            onChange={(e) => setPersonal({ ...personal, monthlySalary: e.target.value })}
+                          />
+                        </InputWrapper>
+                      </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Date of Birth</label>
-                  <input
-                    type="date"
-                    value={personal.dateOfBirth}
-                    onChange={(e) => setPersonal({ ...personal, dateOfBirth: e.target.value })}
-                    className="w-full bg-[#0d0d1a] border border-[#2d3748] text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-all"
-                  />
-                </div>
+                      <div>
+                        <FieldLabel>Employment Type</FieldLabel>
+                        <InputWrapper icon={<Briefcase size={18} />}>
+                          <select
+                            value={personal.employmentMode}
+                            className={`${inputClass} py-4 text-base`}
+                            onChange={(e) => setPersonal({ ...personal, employmentMode: e.target.value })}
+                          >
+                            <option value="salaried">Salaried</option>
+                            <option value="self_employed">Self Employed</option>
+                            <option value="unemployed">Unemployed</option>
+                          </select>
+                        </InputWrapper>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Salary (₹)</label>
-                  <input
-                    type="number"
-                    value={personal.monthlySalary}
-                    onChange={(e) => setPersonal({ ...personal, monthlySalary: e.target.value })}
-                    className="w-full bg-[#0d0d1a] border border-[#2d3748] text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-all placeholder:text-slate-600"
-                    placeholder="50000"
-                    min={0}
-                  />
-                </div>
+                    {/* Error Banner */}
+                    <AnimatePresence>
+                      {breErrors.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-400"
+                        >
+                          {breErrors.map((err, i) => <p key={i}>{err}</p>)}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Employment Mode</label>
-                  <select
-                    value={personal.employmentMode}
-                    onChange={(e) => setPersonal({ ...personal, employmentMode: e.target.value })}
-                    className="w-full bg-[#0d0d1a] border border-[#2d3748] text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-all"
+                    <div className="flex gap-4 pt-4">
+                      <BackButton onClick={() => setStep(1)} />
+                      <PrimaryButton
+                        onClick={handleBRECheck}
+                        loading={loading}
+                        loadingLabel="Checking Eligibility..."
+                      >
+                        Check Eligibility <ArrowRight size={18} />
+                      </PrimaryButton>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+
+              {/* STEP 3 - Document Upload */}
+              {step === 3 && (
+                <motion.div key="step3" variants={pageVariants} initial="hidden" animate="visible" exit="exit">
+                  <h2 className="text-2xl font-bold mb-1">Proof of Income</h2>
+                  <p className="text-zinc-500 mb-8">Upload your latest salary slip</p>
+
+                  <label
+                    htmlFor="fileInput"
+                    className={`block rounded-3xl border-2 border-dashed p-12 text-center cursor-pointer transition-all ${
+                      salarySlipFile
+                        ? 'border-emerald-500 bg-emerald-500/5'
+                        : 'border-zinc-700 hover:border-violet-500 hover:bg-zinc-900/50'
+                    }`}
                   >
-                    <option value="salaried">Salaried</option>
-                    <option value="self_employed">Self-Employed</option>
-                    <option value="unemployed">Unemployed</option>
-                  </select>
-                </div>
-              </div>
+                    <input
+                      id="fileInput"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && file.size > 5 * 1024 * 1024) {
+                          toast.error('File size must be less than 5MB');
+                          return;
+                        }
+                        setSalarySlipFile(file || null);
+                      }}
+                    />
 
-              <div className="bg-[#0d0d1a] rounded-xl p-4 border border-[#2d3748] text-xs text-slate-500">
-                <p className="font-semibold text-slate-400 mb-2">Eligibility Criteria:</p>
-                <ul className="space-y-1">
-                  <li>• Age: 23–50 years</li>
-                  <li>• Monthly salary: ≥ ₹25,000</li>
-                  <li>• Valid PAN format (e.g., ABCDE1234F)</li>
-                  <li>• Employment: Salaried or Self-Employed</li>
-                </ul>
-              </div>
+                    {salarySlipFile ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <FileText size={48} className="text-emerald-400" />
+                        <div className="text-center">
+                          <p className="font-semibold text-emerald-400">{salarySlipFile.name}</p>
+                          <p className="text-xs text-zinc-500 mt-1">
+                            {(salarySlipFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 text-zinc-400">
+                        <UploadCloud size={48} />
+                        <p className="text-lg font-medium">Click to upload salary slip</p>
+                        <p className="text-sm">PDF, JPG, PNG • Max 5 MB</p>
+                      </div>
+                    )}
+                  </label>
 
-              <div className="flex gap-3">
-                <button onClick={() => setStep(1)} className="px-6 py-3 border border-[#2d3748] text-slate-300 rounded-xl text-sm hover:border-slate-500 transition-all">
-                  Back
-                </button>
-                <button
-                  onClick={handleBRECheck}
-                  disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-xl py-3 text-sm transition-all shadow-lg shadow-purple-500/25"
-                >
-                  {loading ? 'Checking eligibility...' : 'Check Eligibility →'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Upload Salary Slip */}
-        {step === 3 && (
-          <div className="bg-[#13131f] border border-[#1e2035] rounded-2xl p-8 animate-fade-in">
-            <h2 className="text-xl font-bold text-white mb-1">Upload Salary Slip</h2>
-            <p className="text-slate-400 text-sm mb-6">PDF, JPG, or PNG • Max 5MB</p>
-
-            <div
-              className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${
-                salarySlipFile
-                  ? 'border-green-500/50 bg-green-500/5'
-                  : 'border-[#2d3748] hover:border-purple-500/50 hover:bg-purple-500/5'
-              }`}
-              onClick={() => document.getElementById('fileInput')?.click()}
-            >
-              <input
-                id="fileInput"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                      toast.error('File size must be under 5MB');
-                      return;
-                    }
-                    setSalarySlipFile(file);
-                  }
-                }}
-              />
-              {salarySlipFile ? (
-                <div>
-                  <p className="text-3xl mb-3">📄</p>
-                  <p className="text-green-400 font-semibold">{salarySlipFile.name}</p>
-                  <p className="text-slate-500 text-xs mt-1">{(salarySlipFile.size / 1024).toFixed(1)} KB</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-4xl mb-3">☁️</p>
-                  <p className="text-slate-300 font-medium mb-1">Click to upload your salary slip</p>
-                  <p className="text-slate-600 text-sm">PDF, JPG, PNG up to 5MB</p>
-                </div>
+                  <div className="flex gap-4 mt-8">
+                    <BackButton onClick={() => setStep(2)} />
+                    <PrimaryButton
+                      onClick={handleFileUpload}
+                      loading={uploading}
+                      loadingLabel="Uploading..."
+                      disabled={!salarySlipFile}
+                    >
+                      Upload & Continue <ArrowRight size={18} />
+                    </PrimaryButton>
+                  </div>
+                </motion.div>
               )}
-            </div>
 
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setStep(2)} className="px-6 py-3 border border-[#2d3748] text-slate-300 rounded-xl text-sm hover:border-slate-500 transition-all">
-                Back
-              </button>
-              <button
-                onClick={handleFileUpload}
-                disabled={uploading || !salarySlipFile}
-                className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3 text-sm transition-all shadow-lg shadow-purple-500/25"
-              >
-                {uploading ? 'Uploading...' : 'Upload & Continue →'}
-              </button>
-            </div>
+              {/* STEP 4 - Loan Configuration */}
+              {step === 4 && (
+                <motion.div key="step4" variants={pageVariants} initial="hidden" animate="visible" exit="exit">
+                  <h2 className="text-2xl font-bold mb-1">Customize Your Loan</h2>
+                  <p className="text-zinc-500 mb-8">Choose amount and tenure</p>
+
+                  <div className="space-y-6">
+                    <RangeSlider
+                      label="Loan Amount"
+                      value={loanAmount}
+                      min={50000}
+                      max={500000}
+                      step={10000}
+                      format={formatCurrency}
+                      color="violet"
+                      onChange={setLoanAmount}
+                    />
+
+                    <RangeSlider
+                      label="Tenure (Days)"
+                      value={tenure}
+                      min={30}
+                      max={365}
+                      step={5}
+                      format={(v) => `${v} days`}
+                      color="indigo"
+                      onChange={setTenure}
+                    />
+
+                    {/* Summary */}
+                    <SectionCard>
+                      <p className="uppercase text-xs font-bold text-violet-400 mb-4">Repayment Summary</p>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Principal</span>
+                          <span className="font-medium">{formatCurrency(loanCalc.principal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Interest Rate</span>
+                          <span className="font-medium">12% p.a.</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Interest Amount</span>
+                          <span className="font-medium">+ {formatCurrency(loanCalc.simpleInterest)}</span>
+                        </div>
+                        <div className="h-px bg-zinc-800 my-2" />
+                        <div className="flex justify-between text-lg font-bold">
+                          <span>Total Repayment</span>
+                          <span className="text-violet-400">{formatCurrency(loanCalc.totalRepayment)}</span>
+                        </div>
+                      </div>
+                    </SectionCard>
+
+                    <div className="flex gap-4 pt-4">
+                      <BackButton onClick={() => setStep(3)} />
+                      <PrimaryButton
+                        onClick={handleApply}
+                        loading={loading}
+                        loadingLabel="Submitting Application..."
+                      >
+                        <Rocket size={20} /> Submit Application
+                      </PrimaryButton>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        )}
+        </div>
 
-        {/* Step 4: Loan Config */}
-        {step === 4 && (
-          <div className="bg-[#13131f] border border-[#1e2035] rounded-2xl p-8 animate-fade-in">
-            <h2 className="text-xl font-bold text-white mb-1">Configure Your Loan</h2>
-            <p className="text-slate-400 text-sm mb-6">Adjust the sliders to configure your loan</p>
-
-            <div className="space-y-8">
-              {/* Amount slider */}
-              <div>
-                <div className="flex justify-between mb-3">
-                  <label className="text-sm font-medium text-slate-300">Loan Amount</label>
-                  <span className="text-purple-400 font-semibold font-mono">{formatCurrency(loanAmount)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={50000}
-                  max={500000}
-                  step={10000}
-                  value={loanAmount}
-                  onChange={(e) => setLoanAmount(Number(e.target.value))}
-                  className="w-full"
-                  style={{ background: `linear-gradient(to right, #6c63ff ${((loanAmount - 50000) / 450000) * 100}%, #1e2035 0%)` }}
-                />
-                <div className="flex justify-between text-xs text-slate-600 mt-1">
-                  <span>₹50K</span><span>₹5L</span>
-                </div>
-              </div>
-
-              {/* Tenure slider */}
-              <div>
-                <div className="flex justify-between mb-3">
-                  <label className="text-sm font-medium text-slate-300">Loan Tenure</label>
-                  <span className="text-purple-400 font-semibold font-mono">{tenure} days</span>
-                </div>
-                <input
-                  type="range"
-                  min={30}
-                  max={365}
-                  step={5}
-                  value={tenure}
-                  onChange={(e) => setTenure(Number(e.target.value))}
-                  className="w-full"
-                  style={{ background: `linear-gradient(to right, #6c63ff ${((tenure - 30) / 335) * 100}%, #1e2035 0%)` }}
-                />
-                <div className="flex justify-between text-xs text-slate-600 mt-1">
-                  <span>30 days</span><span>365 days</span>
-                </div>
-              </div>
-
-              {/* Live Calculation */}
-              <div className="bg-[#0d0d1a] rounded-2xl p-6 border border-[#2d3748]">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 font-mono">Loan Summary</p>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Principal Amount</span>
-                    <span className="text-white font-medium font-mono">{formatCurrency(loanCalc.principal)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Interest Rate</span>
-                    <span className="text-white font-medium font-mono">12% p.a. (Simple Interest)</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Tenure</span>
-                    <span className="text-white font-medium font-mono">{tenure} days</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Simple Interest</span>
-                    <span className="text-yellow-400 font-medium font-mono">{formatCurrency(loanCalc.simpleInterest)}</span>
-                  </div>
-                  <div className="h-px bg-[#2d3748]" />
-                  <div className="flex justify-between">
-                    <span className="text-slate-300 font-semibold">Total Repayment</span>
-                    <span className="text-purple-400 font-bold text-lg font-mono">{formatCurrency(loanCalc.totalRepayment)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button onClick={() => setStep(3)} className="px-6 py-3 border border-[#2d3748] text-slate-300 rounded-xl text-sm hover:border-slate-500 transition-all">
-                  Back
-                </button>
-                <button
-                  onClick={handleApply}
-                  disabled={loading}
-                  className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl py-3 text-sm transition-all shadow-lg shadow-purple-500/25"
-                >
-                  {loading ? 'Submitting...' : '🚀 Submit Application'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <p className="text-center text-xs text-zinc-600 mt-8">
+          256-bit encrypted • Processed as per RBI guidelines
+        </p>
       </div>
     </div>
   );
